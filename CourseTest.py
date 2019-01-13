@@ -1,6 +1,6 @@
 #from __future__ import print_function
 import Face3D as rc
-import xlrd, xlwt
+#import xlrd, xlwt
 import os
 import glob
 
@@ -19,59 +19,69 @@ import glob
 
 
 def get_person_ids():
-    limit = 7
     all_person = [os.path.basename(path)[:5] for path in os.listdir('E:/BosphorusDB/abs/')]
-    return all_person[:limit]
+    return all_person
 
 
 def get_faces(person, method):
     base_folder = 'E:/BosphorusDB/abs/'
 
-    types = ('N', 'PR', 'CR')
-    list = []
-    for type in types:
-        mask = base_folder + person + '_filtered/*_' + type + '*_' + method + '.abs'
-        faces = glob.glob(mask)
-        list.extend(faces)
+    mask = base_folder + person + '_filtered/*_' + method + '.abs'
+    faces = glob.glob(mask)
 
-    return list
+    return faces
 
 
 def enroll_method(persons, method):
     print method
-    for person in persons:
 
+    dbs = [
+        ['Face', ['N', 'LFAU', 'UFAU', 'CAU', 'E']],
+        ['FaceOcclusion', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'O']],
+        ['FacePitchRotation', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'PR']],
+
+        ['Rotation', ['YR', 'CR', 'PR']],
+        ['FullBase', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'O', 'YR', 'CR', 'PR']]
+    ]
+
+    for person in persons:
         print person
         faces = get_faces(person, method)
-        for face in faces:
-            try:
-                rc.RunByParams(enroll=face, person_id=person, database=method + '.db')
-            except:
-                print 'bad face %s' % face
 
-method = 'GHA'
+        for dbName, masks in dbs:
+            print dbName
+            db_faces = get_faces_for_db(faces, masks)
+            enroll_faces(person, db_faces, method + '_' + dbName)
 
-rc.RunByParams(roc_curve=method +'roc-curve.pdf',database=method + '.db')
 
-# persons = get_person_ids()
-#
-# methods = ['GHR','BOF','M1A','BF1','MDA','MR1','MRK']
-# for method in methods:
-#     try:
-#         enroll_method(persons, method)
-#         try:
-#             rc.RunByParams(roc_curve=method +'roc-curve.pdf',database=method + '.db')
-#         except:
-#             print 'bad method %s' % method
-#     except:
-#         try:
-#             enroll_method(persons, method)
-#             try:
-#                 rc.RunByParams(roc_curve=method + 'roc-curve.pdf', database=method + '.db')
-#             except:
-#                 print 'bad method %s' % method
-#         except:
-#             print 'bad method %s' % method
+def enroll_faces(person_id, faces, db_name):
+    for face in faces:
+        try:
+            rc.RunByParams(enroll=face, person_id=person_id, database='./db/' + db_name + '.db')
+        except:
+            print 'bad face %s' % face
+
+
+def get_faces_for_db(faces, masks):
+    result = []
+    for mask in masks:
+        result.extend([f for f in faces if ('_' + mask + '_') in f])
+
+    return result
+
+
+persons = get_person_ids()
+
+methods = ['CLE', 'MDM', 'MMF', 'MDR', 'M1R', 'M1M', 'GHA', 'GHM', 'GHR', 'BOF', 'M1A', 'BF1', 'MDA', 'MR1', 'MRK']
+for method in methods:
+    try:
+        enroll_method(persons, method)
+        # try:
+        #     rc.RunByParams(roc_curve='./roc/' + method + 'roc-curve.pdf', database=method + '.db')
+        # except:
+        #     print 'bad method %s' % method
+    except:
+        print 'very bad method %s' % method
 
 
 # wb = xlwt.Workbook()
