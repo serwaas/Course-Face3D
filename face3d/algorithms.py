@@ -67,8 +67,8 @@ def repair(face):
 
 def key_points(face, 
     d_nose_x1=30, d_nose_x2=5, d_nose_y=5,
-    d_lip_y1=25, d_lip_y2=70, d_lip_y3=4, d_lip_x1=50,
-    d_chin_x=3, d_chin_y1=50, d_chin_y2=75,
+    d_lip_y1=25, d_lip_y2=70, d_lip_y3=4, d_lip_x1=45,
+    d_chin_x=3, d_chin_y1=10, d_chin_y2=75,
     d_eye_x=2, d_eye_y=50):
 
     """
@@ -128,8 +128,8 @@ def key_points(face,
     # 
     # Eyes
     #
-    eye_left = Pmax[d_eye_y:nose_left_y - d_eye_y, nose_left_x - d_eye_x:nose_left_x + d_eye_x]
-    eye_right = Pmax[d_eye_y:nose_right_y - d_eye_y, nose_right_x - d_eye_x:nose_right_x + d_eye_x]
+    eye_left = Pmax[nose_left_y - d_eye_y:nose_left_y + d_eye_y, nose_left_x - d_eye_x:nose_left_x + d_eye_x]
+    eye_right = Pmax[nose_right_y - d_eye_y:nose_right_y + d_eye_y, nose_right_x - d_eye_x:nose_right_x + d_eye_x]
 
     eye_left_x, eye_left_y = max_xy(eye_left, nose_left_x - d_eye_x, d_eye_y)
     eye_right_x, eye_right_y = max_xy(eye_right, nose_right_x - d_eye_x, d_eye_y)
@@ -142,7 +142,7 @@ def key_points(face,
     #
     nose_line = numpy.gradient(face.Z[nose_y, :])
     border_nose_left_x, border_nose_left_y = numpy.nanargmax(nose_line[:lip_left_x - 10]), nose_y
-    border_nose_right_x, border_nose_right_y = numpy.nanargmin(nose_line[lip_right_x + 10:]) + lip_right_x + 10, nose_y
+    border_nose_right_x, border_nose_right_y = numpy.nanargmin(nose_line[lip_right_x:]) + lip_right_x + 10, nose_y
 
     face.key_points["border_nose_left"] = (border_nose_left_x, border_nose_left_y)
     face.key_points["border_nose_right"] = (border_nose_right_x, border_nose_right_y)
@@ -152,7 +152,7 @@ def key_points(face,
     #
     lip_line = numpy.gradient(face.Z[lip_y, :])
     border_lip_left_x, border_lip_left_y = numpy.nanargmax(lip_line[:lip_left_x - 10]), lip_y
-    border_lip_right_x, border_lip_right_y = numpy.nanargmin(lip_line[lip_right_x + 10:]) + lip_right_x + 10, lip_y
+    border_lip_right_x, border_lip_right_y = numpy.nanargmin(lip_line[lip_right_x:]) + lip_right_x + 10, lip_y
 
     face.key_points["border_lip_left"] = (border_lip_left_x, border_lip_left_y)
     face.key_points["border_lip_right"] = (border_lip_right_x, border_lip_right_y)
@@ -162,7 +162,7 @@ def key_points(face,
     #
     forehead_line = numpy.gradient(face.Z[nose_y - (chin_y - nose_y), :])
     border_forehead_left_x, border_forehead_left_y = numpy.nanargmax(forehead_line[:lip_left_x - 10]), nose_y - (chin_y - nose_y)
-    border_forehead_right_x, border_forehead_right_y = numpy.nanargmin(forehead_line[lip_right_x + 10:]) + lip_right_x + 10, nose_y - (chin_y - nose_y)
+    border_forehead_right_x, border_forehead_right_y = numpy.nanargmin(forehead_line[lip_right_x:]) + lip_right_x + 10, nose_y - (chin_y - nose_y)
 
     face.key_points["border_forehead_left"] = (border_forehead_left_x, border_forehead_left_y)
     face.key_points["border_forehead_right"] = (border_forehead_right_x, border_forehead_right_y)
@@ -244,7 +244,7 @@ def crop(face):
     x, y = max_xy(face.Z)
 
     # Set view to center of nose
-    face.center_at(x, y, 240 / 2.0, 320 / 2.0)
+    face.center_at(x, y, face.width / 2.0, face.height / 2.0)
 
 def features_histogram(face, N=67, K=12):
     """
@@ -396,8 +396,8 @@ def calculate_roc_eer(matrix, person_ids):
         outputs = []
 
         for i in range(count):
-            if i % 25 == 0:
-                print "Method %d: %d/%d" % (index, i, count)
+            #if i % 25 == 0:
+                #print "Method %d: %d/%d" % (index, i, count)
 
             for j in range(i, count):
                 if person_ids[i] == person_ids[j]:

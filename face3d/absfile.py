@@ -55,11 +55,12 @@ class AbsFile(object):
 
                 for value in data:
                     try:
-                        # Convert string to correct format
-                        result[index] = data_type(value)
+                        if value != '':
+                            # Convert string to correct format
+                            result[index] = data_type(value)
 
-                        # Increment index
-                        index = index + 1
+                            # Increment index
+                            index = index + 1
                     except ValueError:
                         print "Unexpected input: expected '%s', got '%s'" % (data_type, value)
 

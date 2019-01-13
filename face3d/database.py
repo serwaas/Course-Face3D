@@ -40,7 +40,10 @@ class Database(object):
 
         for filename, data in cursor:
             string_file = cStringIO.StringIO(data)
-            return cPickle.load(gzip.GzipFile(fileobj=string_file, mode='rb'))
+            try:
+                return cPickle.load(gzip.GzipFile(fileobj=string_file, mode='rb'))
+            except:
+                return None
 
     def save(self, filename, person_id, data):
         # Serialize and compress data
@@ -66,6 +69,8 @@ class Database(object):
 
         def _generator():
             for (filename, person_id) in rows:
-                yield (filename, person_id, self.load(filename))
+                f = self.load(filename)
+                if f:
+                    yield (filename, person_id, f)
 
         return GeneratorLen(_generator(), count)

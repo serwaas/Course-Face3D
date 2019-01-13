@@ -16,11 +16,198 @@ import threading
 parameters = {"N": 67, "K": 12}
 parameter_types = {"N": int, "K": int}
 database = None
-debug = False
+debug = True
 
-def main():
+def Run(arguments):
     global database, parameters
     success = False
+    result = False
+
+    # Initialize a database
+    database = Database(arguments.database)
+
+    # Enrollment
+    if arguments.enroll:
+        success = True
+        is_directory, path = arguments.enroll
+
+        if is_directory:
+            files = glob.glob("%s/*.abs" % path)
+            thread_count = 16
+            chunks = [files[i::thread_count] for i in range(thread_count)]
+            threads = []
+
+            # Process each thread
+            for chunk in chunks:
+                thread = threading.Thread(
+                    target=lambda x: [enroll_face(c, arguments.person_id, arguments.auto_id) for c in x], args=(chunk,))
+                thread.daemon = True
+                threads.append(thread)
+                thread.start()
+
+            # Wait for the threads to finish
+            for thread in threads:
+                thread.join()
+
+        else:
+            enroll_face(path.name, arguments.person_id, arguments.auto_id)
+
+    # Caches for
+    faces = False
+    matrix = False
+    rocs = False
+
+    # Authenticating
+    if arguments.authenticate:
+        print "Authenticating face from '%s'" % arguments.authenticate
+        success = True
+
+        # Create face from file
+        face = Face(AbsFile(arguments.authenticate))
+
+        # Normalize it
+        algorithms.process(face, parameters["N"], parameters["K"])
+
+        # Get the other data
+        if not faces:
+            faces = list(database.iterator())
+        matrix = algorithms.similarity_matrix([face] + [face[2] for face in faces], limit=1)  # One line matrix
+
+        # Evaluate result
+        methods, _, _ = matrix.shape
+        tresholds = [0.00, 0.00, 0.00]
+        result = 3*[None]
+
+        for i in range(methods):
+            # Select indexes of candidates
+            vector = numpy.array(matrix[i][0][1:])
+            candidates, = numpy.where(vector >= tresholds[i])
+            persons = {}
+
+            # Verify candidates
+            if len(candidates) == 0:
+                #print "Method %d does not yield any candidates!" % i
+                continue
+
+            # Print method
+            #print "Results for method %d:" % i
+
+            # Print each candidate
+            for candidate in candidates:
+
+                filename, person_id, data = faces[candidate]
+
+                # Add person to list of persons
+                if person_id not in persons:
+                    persons[person_id] = []
+
+                persons[person_id].append(matrix[i][0][candidate + 1])
+
+            result[i] = [(person, ["%.2f" % s for s in scores]) for person, scores in persons.iteritems()]
+            # Print results
+            # for person, scores in persons.iteritems():
+            #     print "Match with person %s with scores %s" % (person, ["%.2f" % s for s in scores])
+
+    # Reevaluation
+    if arguments.reevaluate:
+        print "Reevaluate faces"
+        success = True
+
+        # Get data
+        if not faces: faces = list(database.iterator())
+
+        # Action
+        [algorithms.features_histogram(face[2], parameters["N"], parameters["K"]) for face in faces]
+
+    # Visualizing
+    if arguments.depth_map:
+        print "Generating depth map"
+        success = True
+
+        # Get data
+        if not faces: faces = list(database.iterator())
+
+        # Action
+        utils.generate_depth_map(faces, arguments.depth_map, arguments.draw_key_points)
+
+    if arguments.feature_map:
+        print "Generating feature map"
+        success = True
+
+        # Get data
+        if not faces: faces = list(database.iterator())
+
+        # Action
+        utils.generate_feature_map(faces, arguments.feature_map)
+
+    if arguments.similarity_matrix:
+        print "Generating similarity matrix"
+        success = True
+
+        # Get data
+        if not faces: faces = list(database.iterator())
+        if not matrix: matrix = algorithms.similarity_matrix([face[2] for face in faces])
+
+        # Action
+        utils.generate_similarity_matrix(matrix, faces, arguments.similarity_matrix)
+
+    if arguments.roc_curve:
+        print "Generating ROC curve"
+        success = True
+
+        # Get data
+        if not faces: faces = [f for f in list(database.iterator()) if f ]
+        if not matrix: matrix = algorithms.similarity_matrix([face[2] for face in faces])
+        if not rocs: rocs = algorithms.calculate_roc_eer(matrix, [face[1] for face in faces])
+
+        utils.generate_roc_curve(rocs, arguments.roc_curve)
+
+    return success, result
+
+
+def RunByParams(authenticate=None,
+            enroll=None,
+            person_id=None,
+            auto_id=False,
+            reevaluate=False,
+            depth_map=None,
+            feature_map=None,
+            similarity_matrix=None,
+            roc_curve=None,
+            draw_key_points=False,
+            database='database.db',
+            parametes='K=12,N=67'):
+
+    argument = type("", (), {})()
+    argument.database = database
+    argument.parameters = parametes
+    argument.authenticate = None
+    if authenticate is not None and os.path.exists(authenticate) and not os.path.isdir(authenticate):
+        argument.authenticate = authenticate
+
+    path = os.path.realpath(enroll)
+    argument.enroll = None
+    # Then check path
+    if enroll is not None and os.path.exists(enroll):
+        if os.path.isdir(path):
+            argument.enroll = (True, path)
+        else:
+            argument.enroll = (False, open(path, "rb"))
+
+    argument.person_id = person_id
+    argument.auto_id = auto_id
+    argument.reevaluate = reevaluate
+
+    argument.depth_map = depth_map
+    argument.feature_map = feature_map
+    argument.similarity_matrix = similarity_matrix
+    argument.roc_curve = roc_curve
+    argument.draw_key_points = draw_key_points
+
+    return Run(argument)
+
+def RunByCmd():
+    global database, parameters
 
     # Parse arguments
     arguments, parser = argument_parser()
@@ -42,149 +229,18 @@ def main():
             print "Parameter '%s' of incorrect type" % key
             sys.exit(1)
 
-    # Initialize a database
-    database = Database(arguments.database)
+    (success, result) = Run(arguments)
 
-    # Enrollment
-    if arguments.enroll:
-        success = True
-        is_directory, path = arguments.enroll
-
-        if is_directory:
-            files = glob.glob("%s/*.abs" % path)
-            thread_count = 16
-            chunks = [ files[i::thread_count] for i in range(thread_count) ]
-            threads = []
-
-            # Process each thread
-            for chunk in chunks:
-                thread = threading.Thread(target=lambda x: [ enroll_face(c, arguments.person_id, arguments.auto_id) for c in x ], args=(chunk, ))
-                thread.daemon = True
-                threads.append(thread)
-                thread.start()
-            
-            # Wait for the threads to finish
-            for thread in threads:
-                thread.join()
-
-        else:
-            enroll_face(path, arguments.person_id, arguments.auto_id)
-
-    # Caches for 
-    faces = False
-    matrix = False
-    rocs = False
-
-    # Authenticating
-    if arguments.authenticate:
-        print "Authenticating face from '%s'" % arguments.authenticate
-        success = True
-
-        # Create face from file
-        face = Face(AbsFile(arguments.authenticate))
-
-        # Normalize it
-        algorithms.process(face, parameters["N"], parameters["K"])
-
-        # Get the other data
-        if not faces: faces = list(database.iterator())
-        matrix = algorithms.similarity_matrix([face] + [ face[2] for face in faces ], limit=1) # One line matrix
-
-        # Evaluate result
-        methods, _, _ = matrix.shape
-        tresholds = [0.90, 0.90, 0.90]
-
-        for i in range(methods):
-            # Select indexes of candidates
-            vector = numpy.array(matrix[i][0][1:])
-            candidates, = numpy.where(vector >= tresholds[i])
-            persons = {}
-
-            # Verify candidates
-            if len(candidates) == 0:
-                print "Method %d does not yield any candidates!" % i
-                continue
-
-            # Print method
-            print "Results for method %d:" % i
-
-            # Print each candidate
-            for candidate in candidates:
-                if candidate == 0: 
-                    continue
-
-                filename, person_id, data = faces[candidate]
-
-                # Add person to list of persons
-                if person_id not in persons:
-                    persons[person_id] = []
-
-                persons[person_id].append(matrix[i][0][candidate + 1])
-
-            # Print results
-            for person, scores in persons.iteritems():
-                print "Match with person %s with scores %s" % (person, [ "%.2f" % s for s in scores ])
-
-    # Reevaluation
-    if arguments.reevaluate:
-        print "Reevaluate faces"
-        success = True
-
-        # Get data
-        if not faces: faces = list(database.iterator())
-
-        # Action
-        [ algorithms.features_histogram(face[2], parameters["N"], parameters["K"]) for face in faces ]
-        
-
-    # Visualizing
-    if arguments.depth_map:
-        print "Generating depth map"
-        success = True
-        
-        # Get data
-        if not faces: faces = list(database.iterator())
-        
-        # Action
-        utils.generate_depth_map(faces, arguments.depth_map, arguments.draw_key_points)
-    
-    if arguments.feature_map:
-        print "Generating feature map"
-        success = True
-
-        # Get data
-        if not faces: faces = list(database.iterator())
-
-        # Action
-        utils.generate_feature_map(faces, arguments.feature_map)
-
-    if arguments.similarity_matrix:
-        print "Generating similarity matrix"
-        success = True
-
-        # Get data
-        if not faces: faces = list(database.iterator())
-        if not matrix: matrix = algorithms.similarity_matrix([ face[2] for face in faces ])
-
-        # Action
-        utils.generate_similarity_matrix(matrix, faces, arguments.similarity_matrix)
-
-    if arguments.roc_curve:
-        print "Generating ROC curve"
-        success = True
-
-        # Get data
-        if not faces: faces = list(database.iterator())
-        if not matrix: matrix = algorithms.similarity_matrix([ face[2] for face in faces ])
-        if not rocs: rocs = algorithms.calculate_roc_eer(matrix, [ face[1] for face in faces ])
-
-        utils.generate_roc_curve(rocs, arguments.roc_curve)
-
-    # Print help in case of no action
     if not success:
         parser.print_help()
         sys.exit(1)
     else:
+        if result:
+            for i, res in enumerate(result):
+                print "Mathod %d" % (i)
+                for p, s in res:
+                    print "Match with person %s with scores %s" % (p, s)
+
         sys.exit(0)
 
 def enroll_face(file, person_id=None, auto_id=False, force=False):
@@ -288,6 +344,7 @@ def argument_parser():
     # Done
     return parser.parse_args(), parser
 
+
 # Application main
 if __name__ == '__main__':
-    main()
+    RunByCmd()
