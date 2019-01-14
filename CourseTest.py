@@ -31,35 +31,51 @@ def get_faces(person, method):
 
     return faces
 
+def get_person_folder(person):
+    base_folder = 'E:/BosphorusDB/abs/'
+
+    return base_folder + person + '_filtered/'
+
 
 def enroll_method(persons, method):
     print method
 
+    dbName = 'FullBase'
+
+    for person in persons:
+        print person
+        person_folder = get_person_folder(person)
+        print dbName
+        enroll_faces(person, person_folder, dbName, method)
+        copy_to_dbs(person, dbName, method)
+
+
+def copy_to_dbs(person_id, dbFrom, method):
     dbs = [
         ['Face', ['N', 'LFAU', 'UFAU', 'CAU', 'E']],
         ['FaceOcclusion', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'O']],
         ['FacePitchRotation', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'PR']],
 
-        ['Rotation', ['YR', 'CR', 'PR']],
-        ['FullBase', ['N', 'LFAU', 'UFAU', 'CAU', 'E', 'O', 'YR', 'CR', 'PR']]
+        ['Rotation', ['YR', 'CR', 'PR']]
     ]
 
-    for person in persons:
-        print person
-        faces = get_faces(person, method)
+    db_from_path = './db/' + method + '_' + dbFrom + '.db'
+    for dbName, masks in dbs:
+        for mask in masks:
+            try:
+                rc.RunByParams(copy_to_database='./db/' + method + '_' + dbName + '.db',
+                               mask='_' + mask + '_',
+                               database=db_from_path)
+            except:
+                print 'bad face %s' % person_id
 
-        for dbName, masks in dbs:
-            print dbName
-            db_faces = get_faces_for_db(faces, masks)
-            enroll_faces(person, db_faces, method + '_' + dbName)
 
+def enroll_faces(person_id, folder, db_name, method):
 
-def enroll_faces(person_id, faces, db_name):
-    for face in faces:
-        try:
-            rc.RunByParams(enroll=face, person_id=person_id, database='./db/' + db_name + '.db')
-        except:
-            print 'bad face %s' % face
+    try:
+        rc.RunByParams(enroll=folder, person_id=person_id, database='./db/' + method + '_' + db_name + '.db', mask=method)
+    except:
+        print 'bad face %s' % person_id
 
 
 def get_faces_for_db(faces, masks):
@@ -83,6 +99,11 @@ for method in methods:
     except:
         print 'very bad method %s' % method
 
+
+
+#enroll_faces('bs045', ['C:/Users/SW/Music/CSU/abs/'], 'test')
+# rc.RunByParams(enroll='C:/Users/SW/Music/CSU/abs/', person_id='bs045', database='./db/' + 'test1' + '.db', mask='CLE')
+# rc.RunByParams(copy_to_database='Test_n1', mask='_N_N_1_', database='./db/' + 'test' + '.db')
 
 # wb = xlwt.Workbook()
 # ws = wb.add_sheet('Test')

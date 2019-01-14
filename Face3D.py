@@ -16,7 +16,7 @@ import threading
 parameters = {"N": 67, "K": 12}
 parameter_types = {"N": int, "K": int}
 database = None
-debug = True
+debug = False
 
 def Run(arguments):
     global database, parameters
@@ -32,7 +32,10 @@ def Run(arguments):
         is_directory, path = arguments.enroll
 
         if is_directory:
-            files = glob.glob("%s/*.abs" % path)
+            mask = "%s/*.abs"
+            if arguments.mask:
+                mask = "%s/*"+arguments.mask+"*.abs"
+            files = glob.glob(mask % path)
             thread_count = 16
             chunks = [files[i::thread_count] for i in range(thread_count)]
             threads = []
@@ -56,6 +59,15 @@ def Run(arguments):
     faces = False
     matrix = False
     rocs = False
+
+    if arguments.copy_to_database and arguments.mask:
+        database2 = Database(arguments.copy_to_database)
+        faces_to_copy = [f for f in list(database.iterator()) if arguments.mask in f[0]];
+        for file_name, person_id, face in faces_to_copy:
+            if database.exists(file_name):
+                print "File '%s' already exists" % file_name
+                continue
+            database2.save(file_name, person_id, face)
 
     # Authenticating
     if arguments.authenticate:
@@ -175,11 +187,15 @@ def RunByParams(authenticate=None,
             similarity_matrix=None,
             roc_curve=None,
             draw_key_points=False,
+            copy_to_database = None,
+            mask = None,
             database='database.db',
             parametes='K=12,N=67'):
 
     argument = type("", (), {})()
     argument.database = database
+    argument.copy_to_database = copy_to_database
+    argument.mask = mask
     argument.parameters = parametes
     argument.authenticate = None
     if authenticate is not None and os.path.exists(authenticate) and not os.path.isdir(authenticate):
@@ -243,35 +259,38 @@ def RunByCmd():
 
         sys.exit(0)
 
+
 def enroll_face(file, person_id=None, auto_id=False, force=False):
-    filename = os.path.basename(file)
-    
-    # Check for duplicates
-    if database.exists(file) and not force:
-        print "File '%s' already enrolled" % filename
-        return
 
-    # Make sure we have an identifier
-    if not person_id and not auto_id:
-        print "Auto person identification disabled and no identification specified."
-        return
-
-    # File not yet enrolled
-    print "Processing %s" % filename
-
-    # Read data file
-    absfile = AbsFile(file)
-
-    # Derrive filename
-    if auto_id:
-        basename = os.path.basename(file)
-        person_id = basename[:basename.index('d')]
-
-    # Create Face object
-    face = Face(absfile)
-
-    # Apply algorithms to process raw data
     try:
+        filename = os.path.basename(file)
+    
+        # Check for duplicates
+        if database.exists(file) and not force:
+            print "File '%s' already enrolled" % filename
+            return
+
+        # Make sure we have an identifier
+        if not person_id and not auto_id:
+            print "Auto person identification disabled and no identification specified."
+            return
+
+        # File not yet enrolled
+        print "Processing %s" % filename
+
+        # Read data file
+        absfile = AbsFile(file)
+
+        # Derrive filename
+        if auto_id:
+            basename = os.path.basename(file)
+            person_id = basename[:basename.index('d')]
+
+        # Create Face object
+        face = Face(absfile)
+
+        # Apply algorithms to process raw data
+
         # Apply selected algorithms
         algorithms.process(face, parameters["N"], parameters["K"])
 
